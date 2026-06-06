@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PhysioPlanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Barlow',sans-serif;background:#F0F3F6;}
+select,input,textarea{font-family:'Barlow',sans-serif;outline:none;}
+
+/* ── PRINT ── */
+@media screen{.print-only{display:none!important;}}
+@media print{
+  .no-print{display:none!important;}
+  .print-only{display:block!important;}
+  body{background:white!important;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  @page{margin:8mm 10mm;size:A4;}
+
+  /* Force colors in print */
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
+
+  .pdf-page-break{page-break-before:always;break-before:page;}
+
+  /* Cover */
+  .pdf-cover{background:#0D1B2A!important;color:white!important;padding:34px 44px 26px!important;}
+  .pdf-cover-title{color:white!important;}
+  .pdf-cover-patient{color:#94A3B8!important;}
+  .pdf-cover-patient span{color:white!important;}
+  .pdf-green-bar{background:#1B5E20!important;height:5px;}
+
+  /* Section headers */
+  .pdf-section-header{border-bottom:3px solid #1B5E20!important;}
+  .pdf-section-header-amber{border-bottom:3px solid #E65100!important;}
+
+  /* Table headers */
+  .pdf-th{background:#263238!important;color:white!important;}
+  .pdf-td-week{background:#263238!important;color:white!important;}
+
+  /* Phase headers */
+  .pdf-phase-green{background:#1B5E20!important;color:white!important;}
+  .pdf-phase-red{background:#B71C1C!important;color:white!important;}
+  .pdf-phase-blue{background:#0D47A1!important;color:white!important;}
+  .pdf-phase-gray{background:#263238!important;color:white!important;}
+  .pdf-phase-orange{background:#E65100!important;color:white!important;}
+  .pdf-phase-purple{background:#4A0080!important;color:white!important;}
+
+  /* Cell colors */
+  .cell-alta{background:#B71C1C!important;color:white!important;}
+  .cell-baja{background:#E8F5E9!important;color:#1B5E20!important;}
+  .cell-lesion{background:#1B5E20!important;color:white!important;}
+  .cell-sc{background:#0D47A1!important;color:white!important;}
+  .cell-priming{background:#F9A825!important;color:#333!important;}
+  .cell-competicion{background:#4A0080!important;color:white!important;}
+  .cell-descanso{background:#F5F5F5!important;color:#90A4AE!important;}
+
+  /* Block headers */
+  .block-green{background:#1B5E20!important;color:white!important;}
+  .block-red{background:#B71C1C!important;color:white!important;}
+  .block-blue{background:#0D47A1!important;color:white!important;}
+  .block-gray{background:#263238!important;color:white!important;}
+  .block-orange{background:#E65100!important;color:white!important;}
+  .block-purple{background:#4A0080!important;color:white!important;}
+
+  /* Session header */
+  .pdf-session-header{background:#0D1B2A!important;color:white!important;}
+  .pdf-session-subtitle{color:#94A3B8!important;}
+
+  /* Tutorial/lesion sections */
+  .pdf-tut-section{background:#F1F8F2!important;}
+  .pdf-les-section{background:#FFF8E1!important;}
+
+  /* Row alternating */
+  .row-alt{background:#F7FAF7!important;}
+  .row-white{background:white!important;}
+  .pdf-footer{background:#F7FAF7!important;}
+
+  /* Tutorial/lesion cards */
+  .tut-card{background:white!important;border:1px solid #C8E6C9!important;}
+  .les-card{background:white!important;border:1px solid #FFD54F!important;}
+
+  /* Link colors in print */
+  a{color:#1B5E20!important;}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const {useState,useRef,useEffect,useCallback}=React;
+
+const G={
+  green:"#1B5E20",greenMid:"#2E7D32",greenLight:"#C8E6C9",greenPale:"#F1F8F2",
+  navy:"#0D1B2A",navyMid:"#1A2E45",bg:"#F0F3F6",card:"#FFFFFF",
+  border:"#D4DCD4",text:"#1A1A1A",muted:"#5A6A5A",
+  red:"#C62828",redBg:"#FFEBEE",rowAlt:"#F7FAF7",headerRow:"#263238",
+  amber:"#E65100",purple:"#4A0080",blue:"#0D47A1",
+};
+
+const PRESETS={
+  series:["1","2","3","4","5","6","8","10"],
+  reps:["5","6","8","10","10-12","10-15","12-15","15","20","25","30","AMRAP","Fallo","20s","30s","45s","60s","5/movimiento","Oscilaciones"],
+  rirRpe:["SIN DOLOR","RIR 0","RIR 1","RIR 2","RIR 3","RPE 5","RPE 6","RPE 7","RPE 8","RPE 9","RPE 10","MÁXIMA","40% PC","50% PC","60% PC","70% PC","80% PC"],
+  tempo:["-","Libre","Explosivo","[1:0:1:P]","[2:0:2:P]","[2:1:2:P]","[3:1:0:P]","[3:1:1:P]","[3:1:2:P]","[3:1:3:P]","[4:1:2:P]","[4:1:4:P]","[4:2:2:P]","[1:1:0:P]","[1:1:1:P]"],
+  descanso:["—","0:20s","30s","45s","1 min","1:30 min","2 min","3 min","4 min","5 min","Entre vueltas"],
+};
+const PARAMS=[
+  {key:"series",label:"SETS"},{key:"reps",label:"REPS"},
+  {key:"rirRpe",label:"RIR/RPE"},{key:"tempo",label:"TEMPO"},{key:"descanso",label:"DESCANSO"},
+];
+
+const DAYS=["LUNES","MARTES","MIÉRCOLES","JUEVES","VIERNES","SÁBADO","DOMINGO"];
+
+// Cell style map — returns className for print + inline style for screen
+const CELL_MAP={
+  "":           {bg:"#ECEFF1",color:"#90A4AE",cls:""},
+  "ALTA DEMANDA":{bg:"#B71C1C",color:"white",   cls:"cell-alta"},
+  "BAJA DEMANDA":{bg:"#E8F5E9",color:"#1B5E20",  cls:"cell-baja"},
+  "ESP. LESIÓN": {bg:"#1B5E20",color:"white",    cls:"cell-lesion"},
+  "SC 1":        {bg:"#0D47A1",color:"white",    cls:"cell-sc"},
+  "SC 2":        {bg:"#0D47A1",color:"white",    cls:"cell-sc"},
+  "SC 3":        {bg:"#0D47A1",color:"white",    cls:"cell-sc"},
+  "DESCANSO":    {bg:"#F5F5F5",color:"#90A4AE",  cls:"cell-descanso"},
+  "PRIMING":     {bg:"#F9A825",color:"#333",     cls:"cell-priming"},
+  "COMPETICIÓN": {bg:"#4A0080",color:"white",    cls:"cell-competicion"},
+};
+const CELL_PRESET_KEYS=Object.keys(CELL_MAP);
+
+const PHASE_COLORS=["#1B5E20","#B71C1C","#0D47A1","#263238","#E65100","#4A0080","#006064","#37474F"];
+const PHASE_CLS={"#1B5E20":"pdf-phase-green","#B71C1C":"pdf-phase-red","#0D47A1":"pdf-phase-blue","#263238":"pdf-phase-gray","#E65100":"pdf-phase-orange","#4A0080":"pdf-phase-purple","#006064":"pdf-phase-gray","#37474F":"pdf-phase-gray"};
+const BLOCK_COLORS=[{c:G.green,cls:"block-green"},{c:G.red,cls:"block-red"},{c:G.blue,cls:"block-blue"},{c:G.headerRow,cls:"block-gray"},{c:G.amber,cls:"block-orange"},{c:G.purple,cls:"block-purple"}];
+const BLOCK_CLS={[G.green]:"block-green",[G.red]:"block-red",[G.blue]:"block-blue",[G.headerRow]:"block-gray",[G.amber]:"block-orange",[G.purple]:"block-purple"};
+const EX_CATS=["Neurológico","Cuádriceps","Isquiotibiales","Aductores","Glúteo","Cadena posterior","Miembro inferior","Miembro superior","Espalda","Core","Control motor","Movilidad","Acondicionamiento","Otro"];
+const BLOCK_PRESETS=["PREPARACIÓN AL MOVIMIENTO","BLOQUE ESPECÍFICO DE LESIÓN","BLOQUE DE FUERZA","ACONDICIONAMIENTO","VUELTA A LA CALMA","MOVILIDAD","CONTROL NEUROMUSCULAR"];
+const SESSION_PRESETS=["ESPECÍFICO DE LESIÓN","BAJA DEMANDA","ALTA DEMANDA","DISIPACIÓN / SC","PRIMING","MOVILIDAD GENERAL","ACONDICIONAMIENTO"];
+
+const ytId=url=>{const m=(url||"").match(/(?:youtu\.be\/|[?&]v=|\/embed\/)([A-Za-z0-9_-]{11})/);return m?m[1]:null;};
+const uid=()=>`${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+const mkParams=()=>Object.fromEntries(PARAMS.map(p=>[p.key,{mode:"select",value:""}]));
+const mkExRow=(lib=null)=>({id:uid(),libraryId:lib?.id||null,name:lib?.name||"",url:lib?.url||"",params:mkParams(),notes:""});
+const mkBlock=()=>({id:uid(),title:"PREPARACIÓN AL MOVIMIENTO",titleMode:"select",color:G.green,exercises:[mkExRow()]});
+const mkSession=()=>({id:uid(),title:"ESPECÍFICO DE LESIÓN",titleMode:"select",subtitle:"",blocks:[mkBlock()]});
+const mkCard=()=>({id:uid(),title:"",url:"",description:"",image:null});
+const loadImg=f=>new Promise(r=>{const rd=new FileReader();rd.onload=e=>r(e.target.result);rd.readAsDataURL(f);});
+
+const LS={
+  save:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}},
+  load:(k,def)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):def;}catch(e){return def;}},
+};
+
+/* ── UI ATOMS ── */
+const Tag=({children,bg=G.greenPale,color=G.green,style={}})=>(
+  <span style={{display:"inline-block",padding:"2px 8px",borderRadius:3,fontSize:10,fontWeight:800,letterSpacing:"0.06em",background:bg,color,fontFamily:"'Barlow Condensed',sans-serif",...style}}>{children}</span>
+);
+const Inp=({value,onChange,placeholder="",style={},multiline=false,rows=3})=>{
+  const base={fontFamily:"'Barlow',sans-serif",fontSize:13,color:G.text,background:"white",border:`1.5px solid ${G.border}`,borderRadius:6,padding:"7px 10px",width:"100%",boxSizing:"border-box",outline:"none",...style};
+  return multiline?<textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows} style={{...base,resize:"vertical"}}/>:<input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={base}/>;
+};
+const Btn=({children,onClick,color=G.green,textColor="white",small=false,outline=false,style={},title=""})=>(
+  <button title={title} onClick={onClick} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:small?11:13,letterSpacing:"0.05em",padding:small?"5px 10px":"8px 16px",borderRadius:6,border:outline?`2px solid ${color}`:"none",background:outline?"transparent":color,color:outline?color:textColor,cursor:"pointer",whiteSpace:"nowrap",...style}}>{children}</button>
+);
+const IconBtn=({icon,onClick,title="",color="white",bg="rgba(255,255,255,0.15)",size=28})=>(
+  <button onClick={onClick} title={title} style={{width:size,height:size,borderRadius:6,border:"1px solid rgba(255,255,255,0.3)",background:bg,color,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size<=24?11:14,lineHeight:1,flexShrink:0}}>{icon}</button>
+);
+const ParamCell=({paramKey,value,mode,onChange,onToggle})=>{
+  const base={fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,width:"100%",padding:"5px 6px",border:`1.5px solid ${G.border}`,borderRadius:5,background:"white",color:G.text,boxSizing:"border-box",outline:"none"};
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:3}}>
+      <button onClick={onToggle} style={{fontSize:9,color:G.green,background:"none",border:"none",cursor:"pointer",fontFamily:"'Barlow',sans-serif",padding:0,fontWeight:600,textDecoration:"underline",alignSelf:"flex-end"}}>
+        {mode==="select"?"✏ manual":"☰ lista"}
+      </button>
+      {mode==="select"
+        ?<select value={value} onChange={e=>onChange(e.target.value)} style={base}>
+            <option value="">—</option>
+            {PRESETS[paramKey].map(o=><option key={o} value={o}>{o}</option>)}
+          </select>
+        :<input type="text" value={value} onChange={e=>onChange(e.target.value)} placeholder="…" style={base}/>
+      }
+    </div>
+  );
+};
+
+/* ── Library Picker Modal ── */
+const LibPicker=({library,onSelect,onClose})=>{
+  const [q,setQ]=useState("");
+  const rows=library.filter(e=>!q||e.name.toLowerCase().includes(q.toLowerCase())||e.code.toLowerCase().includes(q.toLowerCase())||(e.category||"").toLowerCase().includes(q.toLowerCase()));
+  return(
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"white",borderRadius:12,width:"min(560px,95vw)",maxHeight:"80vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"}}>
+        <div style={{background:G.navy,padding:"14px 18px",display:"flex",alignItems:"center",gap:12}}>
+          <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:17,color:"white",flex:1}}>📚 AÑADIR DESDE BIBLIOTECA</span>
+          <IconBtn icon="✕" onClick={onClose} title="Cerrar" color="white" size={26}/>
+        </div>
+        <div style={{padding:"10px 14px",borderBottom:`1px solid ${G.border}`}}>
+          <Inp value={q} onChange={setQ} placeholder="Buscar por nombre, código o categoría…"/>
+        </div>
+        <div style={{overflowY:"auto",flex:1}}>
+          {rows.length===0&&<div style={{padding:"30px",textAlign:"center",color:G.muted,fontSize:13}}>Sin resultados para «{q}»</div>}
+          {rows.map(ex=>(
+            <div key={ex.id} onClick={()=>onSelect(ex)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",borderBottom:`1px solid ${G.border}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=G.greenPale} onMouseLeave={e=>e.currentTarget.style.background="white"}>
+              <div style={{flex:1}}>
+                <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:14,color:G.navy}}>{ex.name}</div>
+                <div style={{display:"flex",gap:5,marginTop:3}}>
+                  {ex.code&&<Tag bg={G.greenLight} color={G.green}>{ex.code}</Tag>}
+                  {ex.category&&<Tag bg="#EEF2FF" color="#3730A3">{ex.category}</Tag>}
+                </div>
+              </div>
+              {ytId(ex.url)&&<img src={`https://img.youtube.com/vi/${ytId(ex.url)}/default.jpg`} alt="" style={{width:56,height:38,objectFit:"cover",borderRadius:4}}/>}
+              <span style={{color:G.green,fontSize:22,fontWeight:900}}>+</span>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:"8px 14px",background:G.rowAlt,borderTop:`1px solid ${G.border}`,fontSize:11,color:G.muted}}>{library.length} ejercicios · haz clic para añadir</div>
+      </div>
+    </div>
+  );
+};
+
+/* ════ LIBRARY ════ */
+const MediaCard=({item,onUpdate,onRemove,fileRefs,extraFields=null})=>{
+  const vid=ytId(item.url);
+  return(
+    <div style={{background:"white",borderRadius:10,border:`1.5px solid ${G.border}`,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+      <div style={{position:"relative",height:155,background:G.navy,overflow:"hidden"}}>
+        {item.image&&!vid&&<img src={item.image} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+        {vid&&<img src={`https://img.youtube.com/vi/${vid}/mqdefault.jpg`} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+        {!item.image&&!vid&&<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,color:"rgba(255,255,255,0.2)"}}>🖼</div>}
+        {vid&&<a href={item.url} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.22)",textDecoration:"none"}}>
+          <div style={{width:40,height:40,borderRadius:"50%",background:"rgba(198,40,40,0.88)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:"white"}}>▶</div>
+        </a>}
+        <div style={{position:"absolute",bottom:7,right:7,display:"flex",gap:5}}>
+          <button onClick={()=>fileRefs.current[item.id]?.click()} style={{background:"rgba(0,0,0,0.65)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:5,color:"white",fontSize:11,fontFamily:"'Barlow',sans-serif",fontWeight:600,padding:"3px 8px",cursor:"pointer"}}>📷 {item.image?"Cambiar":"Imagen"}</button>
+          {item.image&&<button onClick={()=>onUpdate({...item,image:null})} style={{background:"rgba(198,40,40,0.8)",border:"none",borderRadius:5,color:"white",fontSize:11,padding:"3px 7px",cursor:"pointer"}}>✕</button>}
+        </div>
+        <input ref={el=>fileRefs.current[item.id]=el} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{if(e.target.files[0]){const d=await loadImg(e.target.files[0]);onUpdate({...item,image:d});}}}/>
+      </div>
+      <div style={{padding:"12px 13px",flex:1,display:"flex",flexDirection:"column",gap:9}}>
+        <div><label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>TÍTULO</label><Inp value={item.title} onChange={v=>onUpdate({...item,title:v})} placeholder="Nombre…" style={{fontWeight:700}}/></div>
+        <div><label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>URL YOUTUBE (opcional)</label><Inp value={item.url} onChange={v=>onUpdate({...item,url:v})} placeholder="https://youtube.com/watch?v=…"/>{vid&&<div style={{fontSize:10,color:G.green,fontWeight:700,marginTop:3}}>✓ Vídeo detectado</div>}</div>
+        {extraFields}
+        <div><label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>DESCRIPCIÓN</label><Inp value={item.description} onChange={v=>onUpdate({...item,description:v})} placeholder="Explicación para el paciente…" multiline rows={3} style={{fontSize:12}}/></div>
+        <div style={{display:"flex",justifyContent:"flex-end",marginTop:2}}><Btn onClick={onRemove} small color={G.red} outline>🗑 Eliminar</Btn></div>
+      </div>
+    </div>
+  );
+};
+
+function CardGrid({items,setItems,placeholder,extraFieldsFn=null}){
+  const fileRefs=useRef({});
+  const add=()=>setItems(s=>[...s,mkCard()]);
+  const rm=id=>setItems(s=>s.filter(x=>x.id!==id));
+  const up=(id,data)=>setItems(s=>s.map(x=>x.id===id?data:x));
+  return(
+    <>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}><Btn onClick={add} color={G.green}>+ Añadir tarjeta</Btn></div>
+      {items.length===0&&<div style={{textAlign:"center",padding:"50px 20px",background:"white",borderRadius:12,border:`2px dashed ${G.border}`}}><div style={{fontSize:42,marginBottom:8}}>🗂</div><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:17,color:G.muted}}>{placeholder}</div></div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:18}}>
+        {items.map(it=>(
+          <MediaCard key={it.id} item={it} fileRefs={fileRefs} onUpdate={d=>up(it.id,d)} onRemove={()=>rm(it.id)} extraFields={extraFieldsFn?extraFieldsFn(it,d=>up(it.id,d)):null}/>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function ExerciseLibrary({library,setLibrary}){
+  const [q,setQ]=useState("");
+  const [form,setForm]=useState({name:"",code:"",category:"",url:""});
+  const [showForm,setShowForm]=useState(false);
+  const [editId,setEditId]=useState(null);
+  const filtered=library.filter(e=>!q||e.name.toLowerCase().includes(q.toLowerCase())||e.code.toLowerCase().includes(q.toLowerCase())||(e.category||"").toLowerCase().includes(q.toLowerCase()));
+  const save=()=>{if(!form.name.trim())return;if(editId){setLibrary(l=>l.map(e=>e.id===editId?{...form,id:editId}:e));setEditId(null);}else setLibrary(l=>[...l,{...form,id:uid()}]);setForm({name:"",code:"",category:"",url:""});setShowForm(false);};
+  const vid=ytId(form.url);
+  return(
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center"}}>
+        <div style={{flex:1}}><Inp value={q} onChange={setQ} placeholder="🔍 Buscar por nombre, código o categoría…"/></div>
+        <Btn onClick={()=>{setEditId(null);setForm({name:"",code:"",category:"",url:""});setShowForm(s=>!s);}} color={G.green}>{showForm?"✕ Cancelar":"+ Nuevo ejercicio"}</Btn>
+      </div>
+      {showForm&&(
+        <div style={{background:"white",borderRadius:10,border:`2px solid ${G.green}`,padding:"18px 20px",marginBottom:16}}>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:15,color:G.green,marginBottom:14}}>{editId?"✏ EDITAR":"+ NUEVO EJERCICIO"}</div>
+          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:12,marginBottom:12}}>
+            <div><label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>NOMBRE *</label><Inp value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="Ej: Copenhagen dinámico" style={{fontWeight:700}}/></div>
+            <div><label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>CÓDIGO</label><Inp value={form.code} onChange={v=>setForm(f=>({...f,code:v.toUpperCase()}))} placeholder="ADD-001"/></div>
+            <div><label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>CATEGORÍA</label>
+              <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} style={{fontFamily:"'Barlow',sans-serif",fontSize:13,color:G.text,background:"white",border:`1.5px solid ${G.border}`,borderRadius:6,padding:"7px 10px",width:"100%",outline:"none"}}>
+                <option value="">Sin categoría</option>{EX_CATS.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{marginBottom:12}}>
+            <label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>URL YOUTUBE</label>
+            <div style={{display:"flex",gap:10,alignItems:"center"}}>
+              <div style={{flex:1}}><Inp value={form.url} onChange={v=>setForm(f=>({...f,url:v}))} placeholder="https://youtube.com/watch?v=…"/></div>
+              {vid&&<div style={{display:"flex",alignItems:"center",gap:7,background:G.greenPale,border:`1px solid ${G.greenLight}`,borderRadius:7,padding:"5px 10px"}}><img src={`https://img.youtube.com/vi/${vid}/default.jpg`} alt="" style={{width:44,height:30,objectFit:"cover",borderRadius:3}}/><span style={{fontSize:10,fontWeight:700,color:G.green}}>✓</span></div>}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <Btn onClick={()=>{setShowForm(false);setEditId(null);}} small color={G.muted} outline>Cancelar</Btn>
+            <Btn onClick={save} color={G.green}>{editId?"GUARDAR":"AÑADIR"}</Btn>
+          </div>
+        </div>
+      )}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:12}}>
+        {filtered.map(ex=>{const v=ytId(ex.url);return(
+          <div key={ex.id} style={{background:"white",borderRadius:9,border:`1.5px solid ${G.border}`,overflow:"hidden"}}>
+            <div style={{height:95,background:G.navy,position:"relative",overflow:"hidden"}}>
+              {v?<img src={`https://img.youtube.com/vi/${v}/mqdefault.jpg`} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,color:"rgba(255,255,255,0.2)"}}>📹</div>}
+              {ex.code&&<div style={{position:"absolute",top:5,left:5}}><Tag bg="rgba(0,0,0,0.72)" color="white" style={{fontSize:10}}>{ex.code}</Tag></div>}
+              {v&&<a href={ex.url} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.22)",textDecoration:"none"}}><div style={{width:28,height:28,borderRadius:"50%",background:"rgba(198,40,40,0.88)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"white"}}>▶</div></a>}
+            </div>
+            <div style={{padding:"8px 11px"}}><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:13,color:G.navy,lineHeight:1.2,marginBottom:4}}>{ex.name}</div>{ex.category&&<Tag bg="#EEF2FF" color="#3730A3">{ex.category}</Tag>}</div>
+            <div style={{padding:"6px 10px",borderTop:`1px solid ${G.border}`,display:"flex",gap:5}}>
+              <Btn onClick={()=>{setForm({name:ex.name,code:ex.code,category:ex.category,url:ex.url});setEditId(ex.id);setShowForm(true);}} small color={G.navyMid} outline style={{flex:1}}>✏ Editar</Btn>
+              <Btn onClick={()=>setLibrary(l=>l.filter(e=>e.id!==ex.id))} small color={G.red} outline>🗑</Btn>
+            </div>
+          </div>
+        );})}
+        {filtered.length===0&&<div style={{gridColumn:"1/-1",textAlign:"center",padding:"40px 20px",color:G.muted,fontSize:13}}>{library.length===0?"Añade tu primer ejercicio":"Sin resultados para «"+q+"»"}</div>}
+      </div>
+    </div>
+  );
+}
+
+function LibrarySection({exLib,setExLib,tutLib,setTutLib,lesLib,setLesLib}){
+  const [sub,setSub]=useState("ejercicios");
+  const subS=a=>({padding:"9px 18px",border:"none",background:a?"white":"transparent",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:13,letterSpacing:"0.06em",color:a?G.navy:G.muted,borderBottom:a?`3px solid ${G.green}`:"3px solid transparent",whiteSpace:"nowrap"});
+  return(
+    <div>
+      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:27,color:G.navy,letterSpacing:"0.03em",marginBottom:3}}>BIBLIOTECA</div>
+      <div style={{color:G.muted,fontSize:13,marginBottom:14}}>Gestiona ejercicios, tutoriales y fichas de lesión para usarlos en cualquier pauta</div>
+      <div style={{display:"flex",borderBottom:`1px solid ${G.border}`,marginBottom:22,background:"white",borderRadius:"8px 8px 0 0",overflow:"hidden"}}>
+        {[["ejercicios","💪 EJERCICIOS",exLib.length],["tutoriales","🎬 TUTORIALES",tutLib.length],["lesiones","🦴 LESIONES & OBJETIVOS",lesLib.length]].map(([k,l,c])=>(
+          <button key={k} onClick={()=>setSub(k)} style={subS(sub===k)}>{l} <Tag bg={sub===k?G.green:G.border} color={sub===k?"white":G.muted} style={{marginLeft:5}}>{c}</Tag></button>
+        ))}
+      </div>
+      {sub==="ejercicios"&&<ExerciseLibrary library={exLib} setLibrary={setExLib}/>}
+      {sub==="tutoriales"&&<><p style={{fontSize:12,color:G.muted,marginBottom:14}}>Tarjetas de metodología: RPE, Tempo, tipos de isométrico, etc.</p><CardGrid items={tutLib} setItems={setTutLib} placeholder="Sin tutoriales — pulsa + para añadir"/></>}
+      {sub==="lesiones"&&<><p style={{fontSize:12,color:G.muted,marginBottom:14}}>Fichas de lesión y objetivos terapéuticos del paciente.</p>
+        <CardGrid items={lesLib} setItems={setLesLib} placeholder="Sin fichas — pulsa + para añadir"
+          extraFieldsFn={(item,upd)=>(
+            <div><label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>OBJETIVOS TERAPÉUTICOS</label>
+              <Inp value={item.objectives||""} onChange={v=>upd({...item,objectives:v})} placeholder="Ej: Recuperar rango de movimiento completo…" multiline rows={2} style={{fontSize:12}}/></div>
+          )}/></>}
+    </div>
+  );
+}
+
+/* ════ CALENDAR ════ */
+function CellEdit({value,onChange}){
+  const [manual,setManual]=useState(value!==""&&!CELL_PRESET_KEYS.includes(value));
+  const [manVal,setManVal]=useState(!CELL_PRESET_KEYS.includes(value)&&value!==""?value:"");
+  if(manual)return(
+    <div style={{display:"flex",gap:3,padding:"2px"}}>
+      <input autoFocus value={manVal} onChange={e=>{setManVal(e.target.value);onChange(e.target.value);}} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,background:"white",border:`1px solid ${G.green}`,borderRadius:4,color:G.text,outline:"none",padding:"3px 5px",width:"100%"}}/>
+      <button onClick={()=>{setManual(false);onChange("");}} style={{background:"none",border:"none",cursor:"pointer",color:G.muted,fontSize:14,padding:"0 2px"}} title="Volver a lista">☰</button>
+    </div>
+  );
+  const s=CELL_MAP[value]||{bg:"#ECEFF1",color:"#90A4AE"};
+  return(
+    <select value={value} onChange={e=>{if(e.target.value==="__manual__"){setManual(true);setManVal("");onChange("");}else onChange(e.target.value);}}
+      style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,background:s.bg,color:s.color,border:"none",outline:"none",width:"100%",textAlign:"center",cursor:"pointer",borderRadius:3,padding:"4px 2px"}}>
+      {CELL_PRESET_KEYS.map(k=><option key={k} value={k} style={{color:G.text,background:"white"}}>{k||"—"}</option>)}
+      <option value="__manual__" style={{color:G.text,background:"white"}}>✏ Introducir manual…</option>
+    </select>
+  );
+}
+
+function CalendarSection({phases,setPhases}){
+  const [editMode,setEditMode]=useState(false);
+  const upCell=(pi,wi,di,v)=>setPhases(ps=>ps.map((p,i)=>i!==pi?p:{...p,weeks:p.weeks.map((w,j)=>j!==wi?w:{...w,days:w.days.map((d,k)=>k!==di?d:v)})}));
+  const upWLbl=(pi,wi,v)=>setPhases(ps=>ps.map((p,i)=>i!==pi?p:{...p,weeks:p.weeks.map((w,j)=>j!==wi?w:{...w,label:v})}));
+  const upPName=(pi,v)=>setPhases(ps=>ps.map((p,i)=>i!==pi?p:{...p,name:v}));
+  const upPCol=(pi,v)=>setPhases(ps=>ps.map((p,i)=>i!==pi?p:{...p,color:v}));
+  const addWeek=pi=>setPhases(ps=>ps.map((p,i)=>i!==pi?p:{...p,weeks:[...p.weeks,{id:uid(),label:"NUEVA SEMANA",days:["","","","","","",""]}]}));
+  const rmWeek=(pi,wi)=>setPhases(ps=>ps.map((p,i)=>i!==pi?p:{...p,weeks:p.weeks.filter((_,j)=>j!==wi)}));
+  const addPhase=()=>setPhases(ps=>[...ps,{id:uid(),name:"NUEVA FASE",color:PHASE_COLORS[ps.length%PHASE_COLORS.length],weeks:[{id:uid(),label:"CARGA 1",days:["","","","","","",""]}]}]);
+  const rmPhase=pi=>setPhases(ps=>ps.filter((_,i)=>i!==pi));
+  const mvPhase=(pi,dir)=>setPhases(ps=>{const a=[...ps],ni=pi+dir;if(ni<0||ni>=a.length)return a;[a[pi],a[ni]]=[a[ni],a[pi]];return a;});
+  const thS={fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:11,letterSpacing:"0.07em",color:"white",background:G.headerRow,padding:"7px 5px",textAlign:"center",border:"1px solid #37474F"};
+  const tdW={fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,background:"#263238",color:"white",padding:"5px 7px",textAlign:"center",border:"1px solid #37474F",whiteSpace:"pre-line",lineHeight:1.3,minWidth:84};
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:16}}>
+        <div><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:27,color:G.navy,letterSpacing:"0.03em"}}>ESTRUCTURA DEL PERÍODO</div><div style={{color:G.muted,fontSize:13,marginTop:2}}>Añade o quita fases según las necesidades del paciente</div></div>
+        <div style={{display:"flex",gap:8}}>
+          {editMode&&<Btn onClick={addPhase} small color={G.navyMid}>+ Fase</Btn>}
+          <Btn onClick={()=>setEditMode(s=>!s)} small color={editMode?G.green:G.navyMid}>{editMode?"✔ Guardar":"✏ Editar"}</Btn>
+        </div>
+      </div>
+      {phases.length===0&&(
+        <div style={{textAlign:"center",padding:"50px 20px",background:"white",borderRadius:12,border:`2px dashed ${G.border}`}}>
+          <div style={{fontSize:42,marginBottom:10}}>📅</div>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:18,color:G.muted}}>Sin fases</div>
+          <div style={{fontSize:13,color:G.muted,marginTop:4,marginBottom:14}}>Activa edición y añade las fases del tratamiento</div>
+          <Btn onClick={()=>{setEditMode(true);addPhase();}}>+ Crear primera fase</Btn>
+        </div>
+      )}
+      {phases.map((phase,pi)=>(
+        <div key={phase.id} style={{marginBottom:24}}>
+          <div style={{background:phase.color,padding:"9px 14px",borderRadius:"7px 7px 0 0",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+            {editMode?(
+              <>
+                <input value={phase.name} onChange={e=>upPName(pi,e.target.value)} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:16,letterSpacing:"0.07em",background:"transparent",border:"2px solid rgba(255,255,255,0.4)",borderRadius:5,color:"white",outline:"none",padding:"3px 9px",minWidth:150}}/>
+                <div style={{display:"flex",gap:4}}>{PHASE_COLORS.map(c=><button key={c} onClick={()=>upPCol(pi,c)} style={{width:15,height:15,borderRadius:"50%",background:c,border:phase.color===c?"3px solid white":"2px solid rgba(255,255,255,0.25)",cursor:"pointer"}}/>)}</div>
+                <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+                  <IconBtn icon="↑" onClick={()=>mvPhase(pi,-1)} title="Mover arriba"/>
+                  <IconBtn icon="↓" onClick={()=>mvPhase(pi,1)} title="Mover abajo"/>
+                  <IconBtn icon="🗑" onClick={()=>rmPhase(pi)} title="Eliminar fase" bg="rgba(198,40,40,0.6)"/>
+                </div>
+              </>
+            ):(
+              <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:16,letterSpacing:"0.07em",color:"white"}}>{phase.name}</span>
+            )}
+          </div>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",background:"white"}}>
+              <thead><tr>
+                <th style={{...thS,minWidth:84}}>SEMANA</th>
+                {DAYS.map(d=><th key={d} style={{...thS,minWidth:100}}>{d}</th>)}
+                {editMode&&<th style={{...thS,width:36}}></th>}
+              </tr></thead>
+              <tbody>{phase.weeks.map((w,wi)=>(
+                <tr key={w.id}>
+                  <td style={tdW}>{editMode?<input value={w.label} onChange={e=>upWLbl(pi,wi,e.target.value)} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,background:"transparent",border:"none",color:"white",outline:"none",width:"100%",textAlign:"center"}}/>:w.label}</td>
+                  {w.days.map((cell,di)=>{
+                    const s=CELL_MAP[cell]||{bg:"#ECEFF1",color:"#90A4AE",cls:""};
+                    return(<td key={di} style={{border:`1px solid ${G.border}`,padding:2,background:s.bg}}>
+                      {editMode?<CellEdit value={cell} onChange={v=>upCell(pi,wi,di,v)}/>:<div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:s.color,textAlign:"center",padding:"5px 2px"}}>{cell||"—"}</div>}
+                    </td>);
+                  })}
+                  {editMode&&<td style={{border:`1px solid ${G.border}`,textAlign:"center",background:"#FAFAFA",padding:2}}><IconBtn icon="🗑" onClick={()=>rmWeek(pi,wi)} title="Eliminar semana" color={G.red} bg="transparent" size={24}/></td>}
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          {editMode&&<button onClick={()=>addWeek(pi)} style={{width:"100%",padding:"7px",background:"rgba(0,0,0,0.04)",border:`1px dashed ${G.border}`,borderTop:"none",borderRadius:"0 0 6px 6px",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,color:G.muted,cursor:"pointer"}}>+ Añadir semana</button>}
+        </div>
+      ))}
+      {phases.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4}}>
+        {Object.entries(CELL_MAP).filter(([k])=>k).map(([k,v])=><Tag key={k} bg={v.bg} color={v.color} style={{border:`1px solid ${G.border}`}}>{k}</Tag>)}
+        <Tag bg="#F3E5F5" color="#4A0080" style={{border:"1px solid #CE93D8"}}>+ texto libre</Tag>
+      </div>}
+    </div>
+  );
+}
+
+/* ════ IN-PLAN TUTORIALS/OBJETIVOS ════ */
+function PlanTutorialsSection({items,setItems}){
+  const fileRefs=useRef({});
+  const add=()=>setItems(s=>[...s,{...mkCard(),type:"tutorial"}]);
+  const addLes=()=>setItems(s=>[...s,{...mkCard(),type:"lesion",objectives:""}]);
+  const rm=id=>setItems(s=>s.filter(x=>x.id!==id));
+  const up=(id,data)=>setItems(s=>s.map(x=>x.id===id?data:x));
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:16}}>
+        <div>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:27,color:G.navy,letterSpacing:"0.03em"}}>TUTORIALES & OBJETIVOS</div>
+          <div style={{color:G.muted,fontSize:13,marginTop:2}}>Vídeos explicativos, imágenes motivacionales y objetivos del paciente para esta pauta</div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <Btn onClick={addLes} color={G.amber}>+ Lesión / Objetivo</Btn>
+          <Btn onClick={add} color={G.green}>+ Tutorial / Vídeo</Btn>
+        </div>
+      </div>
+      {items.length===0&&(
+        <div style={{textAlign:"center",padding:"50px 20px",background:"white",borderRadius:12,border:`2px dashed ${G.border}`}}>
+          <div style={{fontSize:42,marginBottom:10}}>🎬</div>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:18,color:G.muted}}>Sin tutoriales ni objetivos</div>
+          <div style={{fontSize:13,color:G.muted,marginTop:4}}>Añade vídeos de YouTube, imágenes o descripciones de objetivos</div>
+        </div>
+      )}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:18}}>
+        {items.map(it=>{
+          const vid=ytId(it.url);
+          const isLes=it.type==="lesion";
+          const accentColor=isLes?G.amber:G.green;
+          const accentBg=isLes?"#FFF8E1":G.greenPale;
+          const accentBorder=isLes?"#FFD54F":G.greenLight;
+          return(
+            <div key={it.id} style={{background:"white",borderRadius:10,border:`2px solid ${accentBorder}`,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+              <div style={{background:accentColor,padding:"6px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:11,color:"white",letterSpacing:"0.08em"}}>{isLes?"🦴 LESIÓN / OBJETIVO":"🎬 TUTORIAL / VÍDEO"}</span>
+                <button onClick={()=>rm(it.id)} style={{background:"rgba(0,0,0,0.2)",border:"none",borderRadius:4,color:"white",fontSize:12,cursor:"pointer",padding:"2px 7px",fontFamily:"'Barlow',sans-serif"}}>🗑</button>
+              </div>
+              <div style={{position:"relative",height:145,background:G.navy,overflow:"hidden"}}>
+                {it.image&&!vid&&<img src={it.image} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+                {vid&&<img src={`https://img.youtube.com/vi/${vid}/mqdefault.jpg`} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>}
+                {!it.image&&!vid&&<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,color:"rgba(255,255,255,0.2)"}}>🖼</div>}
+                {vid&&<a href={it.url} target="_blank" rel="noopener noreferrer" style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.22)",textDecoration:"none"}}><div style={{width:38,height:38,borderRadius:"50%",background:"rgba(198,40,40,0.88)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"white"}}>▶</div></a>}
+                <div style={{position:"absolute",bottom:6,right:6,display:"flex",gap:4}}>
+                  <button onClick={()=>fileRefs.current[it.id]?.click()} style={{background:"rgba(0,0,0,0.65)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:4,color:"white",fontSize:10,fontFamily:"'Barlow',sans-serif",fontWeight:600,padding:"2px 7px",cursor:"pointer"}}>📷 {it.image?"Cambiar":"Imagen"}</button>
+                  {it.image&&<button onClick={()=>up(it.id,{...it,image:null})} style={{background:"rgba(198,40,40,0.8)",border:"none",borderRadius:4,color:"white",fontSize:10,padding:"2px 6px",cursor:"pointer"}}>✕</button>}
+                </div>
+                <input ref={el=>fileRefs.current[it.id]=el} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{if(e.target.files[0]){const d=await loadImg(e.target.files[0]);up(it.id,{...it,image:d});}}}/>
+              </div>
+              <div style={{padding:"11px 12px",flex:1,display:"flex",flexDirection:"column",gap:8}}>
+                <div><label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:accentColor,letterSpacing:"0.1em",display:"block",marginBottom:3}}>TÍTULO</label><Inp value={it.title} onChange={v=>up(it.id,{...it,title:v})} placeholder={isLes?"Ej: Rotura fibrilar isquiotibial…":"Ej: RPE – Rango de Esfuerzo…"} style={{fontWeight:700,fontSize:12}}/></div>
+                <div><label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>URL YOUTUBE (opcional)</label><Inp value={it.url||""} onChange={v=>up(it.id,{...it,url:v})} placeholder="https://youtube.com/watch?v=…" style={{fontSize:12}/></div>
+                {isLes&&<div><label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.amber,letterSpacing:"0.1em",display:"block",marginBottom:3}}>OBJETIVOS TERAPÉUTICOS</label><Inp value={it.objectives||""} onChange={v=>up(it.id,{...it,objectives:v})} placeholder="Ej: Recuperar rango completo, eliminar dolor en carga…" multiline rows={2} style={{fontSize:11}}/></div>}
+                <div><label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>DESCRIPCIÓN</label><Inp value={it.description||""} onChange={v=>up(it.id,{...it,description:v})} placeholder="Explicación para el paciente…" multiline rows={2} style={{fontSize:11}}/></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ════ SESSIONS ════ */
+function ExRow({ex,onUpdate,onRemove,onAdd}){
+  const upP=(k,f,v)=>onUpdate({...ex,params:{...ex.params,[k]:{...ex.params[k],[f]:v}}});
+  const tdB={border:`1px solid ${G.border}`,padding:"6px 7px",verticalAlign:"middle"};
+  return(
+    <tr>
+      <td style={{...tdB,minWidth:210}}>
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          <Inp value={ex.name} onChange={v=>onUpdate({...ex,name:v})} placeholder="Nombre del ejercicio" style={{fontWeight:700,fontSize:12}}/>
+          <Inp value={ex.url||""} onChange={v=>onUpdate({...ex,url:v})} placeholder="URL YouTube (opcional)" style={{fontSize:11,color:G.muted}}/>
+          {ytId(ex.url)&&<a href={ex.url} target="_blank" rel="noopener noreferrer" style={{fontSize:10,fontWeight:800,color:G.red,textDecoration:"none"}}>▶ Ver vídeo</a>}
+          <Inp value={ex.notes||""} onChange={v=>onUpdate({...ex,notes:v})} placeholder="Nota / variante…" style={{fontSize:10,color:G.muted,fontStyle:"italic"}}/>
+        </div>
+      </td>
+      {PARAMS.map(p=>(
+        <td key={p.key} style={{...tdB,textAlign:"center",minWidth:p.key==="tempo"?118:84}}>
+          <ParamCell paramKey={p.key} value={ex.params[p.key]?.value||""} mode={ex.params[p.key]?.mode||"select"} onChange={v=>upP(p.key,"value",v)} onToggle={()=>upP(p.key,"mode",ex.params[p.key]?.mode==="select"?"manual":"select")}/>
+        </td>
+      ))}
+      <td style={{...tdB,textAlign:"center",minWidth:56}}>
+        <div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"center"}}>
+          <IconBtn icon="+" onClick={onAdd} title="Añadir ejercicio debajo" color={G.green} bg={G.greenPale} size={26}/>
+          <IconBtn icon="🗑" onClick={onRemove} title="Eliminar ejercicio" color={G.red} bg={G.redBg} size={26}/>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function BlockCard({block,library,onUpdate,onRemove}){
+  const [open,setOpen]=useState(true);
+  const [picker,setPicker]=useState(false);
+  const upEx=(id,d)=>onUpdate({...block,exercises:block.exercises.map(e=>e.id===id?{...d,id}:e)});
+  const rmEx=id=>onUpdate({...block,exercises:block.exercises.filter(e=>e.id!==id)});
+  const addAfter=id=>{const i=block.exercises.findIndex(e=>e.id===id);const nx=[...block.exercises];nx.splice(i+1,0,mkExRow());onUpdate({...block,exercises:nx});};
+  const addLib=ex=>{onUpdate({...block,exercises:[...block.exercises,mkExRow(ex)]});setPicker(false);};
+  const thS={fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:11,letterSpacing:"0.07em",color:"white",background:G.headerRow,padding:"7px 8px",textAlign:"center",border:"1px solid #37474F"};
+  return(
+    <>
+      {picker&&<LibPicker library={library} onSelect={addLib} onClose={()=>setPicker(false)}/>}
+      <div style={{marginBottom:14,borderRadius:8,overflow:"hidden",border:`1.5px solid ${G.border}`}}>
+        <div style={{background:block.color,padding:"8px 11px",display:"flex",alignItems:"center",gap:9,flexWrap:"wrap"}}>
+          <IconBtn icon={open?"▼":"▶"} onClick={()=>setOpen(s=>!s)} title={open?"Colapsar":"Expandir"}/>
+          {block.titleMode==="select"
+            ?<select value={block.title} onChange={e=>{if(e.target.value==="__manual__")onUpdate({...block,titleMode:"manual"});else onUpdate({...block,title:e.target.value});}} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:14,letterSpacing:"0.07em",background:"transparent",border:"none",color:"white",outline:"none",cursor:"pointer",maxWidth:270}}>
+                {BLOCK_PRESETS.map(b=><option key={b} value={b} style={{color:G.text,background:"white"}}>{b}</option>)}
+                <option value="__manual__" style={{color:G.text,background:"white"}}>✏ Introducir manualmente…</option>
+              </select>
+            :<div style={{display:"flex",alignItems:"center",gap:6,flex:1}}>
+                <input autoFocus value={block.title} onChange={e=>onUpdate({...block,title:e.target.value})} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:14,letterSpacing:"0.07em",background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.4)",borderRadius:5,color:"white",outline:"none",padding:"4px 9px",minWidth:200}}/>
+                <button onClick={()=>onUpdate({...block,titleMode:"select"})} style={{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:4,color:"white",fontSize:10,cursor:"pointer",padding:"3px 7px",fontFamily:"'Barlow',sans-serif"}}>☰ lista</button>
+              </div>}
+          <div style={{display:"flex",gap:4}}>{BLOCK_COLORS.map(({c})=><button key={c} onClick={()=>onUpdate({...block,color:c})} style={{width:13,height:13,borderRadius:"50%",background:c,border:block.color===c?"3px solid white":"2px solid rgba(255,255,255,0.25)",cursor:"pointer"}}/>)}</div>
+          <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+            <Btn onClick={()=>setPicker(true)} small color="rgba(255,255,255,0.18)" textColor="white" outline style={{border:"1px solid rgba(255,255,255,0.35)",fontSize:11}}>📚 Biblioteca</Btn>
+            <IconBtn icon="🗑" onClick={onRemove} title="Eliminar bloque" bg="rgba(198,40,40,0.6)"/>
+          </div>
+        </div>
+        {open&&<div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",background:"white"}}>
+            <thead><tr>
+              <th style={{...thS,textAlign:"left",minWidth:210}}>TAREA</th>
+              {PARAMS.map(p=><th key={p.key} style={thS}>{p.label}</th>)}
+              <th style={{...thS,minWidth:56}}></th>
+            </tr></thead>
+            <tbody>{block.exercises.map(ex=>(
+              <ExRow key={ex.id} ex={ex} onUpdate={d=>upEx(ex.id,d)} onRemove={()=>rmEx(ex.id)} onAdd={()=>addAfter(ex.id)}/>
+            ))}</tbody>
+          </table>
+        </div>}
+      </div>
+    </>
+  );
+}
+
+function SessionCard({session,library,onUpdate,onRemove}){
+  const [open,setOpen]=useState(true);
+  const addBlock=()=>onUpdate({...session,blocks:[...session.blocks,mkBlock()]});
+  const upBlk=(id,d)=>onUpdate({...session,blocks:session.blocks.map(b=>b.id===id?{...d,id}:b)});
+  const rmBlk=id=>onUpdate({...session,blocks:session.blocks.filter(b=>b.id!==id)});
+  return(
+    <div style={{marginBottom:20,background:"white",borderRadius:10,border:`1.5px solid ${G.border}`,overflow:"hidden"}}>
+      <div style={{background:G.navy,padding:"11px 13px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <IconBtn icon={open?"▼":"▶"} onClick={()=>setOpen(s=>!s)} title={open?"Colapsar":"Expandir"}/>
+        {session.titleMode==="select"
+          ?<select value={session.title} onChange={e=>{if(e.target.value==="__manual__")onUpdate({...session,titleMode:"manual"});else onUpdate({...session,title:e.target.value});}} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:15,letterSpacing:"0.06em",background:"transparent",border:"none",color:"white",outline:"none",cursor:"pointer"}}>
+              {SESSION_PRESETS.map(s=><option key={s} value={s} style={{color:G.text,background:"white"}}>{s}</option>)}
+              <option value="__manual__" style={{color:G.text,background:"white"}}>✏ Introducir manualmente…</option>
+            </select>
+          :<div style={{display:"flex",alignItems:"center",gap:6}}>
+              <input autoFocus value={session.title} onChange={e=>onUpdate({...session,title:e.target.value})} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:15,letterSpacing:"0.06em",background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.3)",borderRadius:5,color:"white",outline:"none",padding:"4px 10px",minWidth:180}}/>
+              <button onClick={()=>onUpdate({...session,titleMode:"select"})} style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.25)",borderRadius:4,color:"rgba(255,255,255,0.8)",fontSize:10,cursor:"pointer",padding:"3px 7px",fontFamily:"'Barlow',sans-serif"}}>☰ lista</button>
+            </div>}
+        <input value={session.subtitle} onChange={e=>onUpdate({...session,subtitle:e.target.value})} placeholder="Fecha / contexto…" style={{fontFamily:"'Barlow',sans-serif",fontWeight:500,fontSize:12,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:5,color:"rgba(255,255,255,0.8)",outline:"none",padding:"4px 9px"}}/>
+        <div style={{marginLeft:"auto"}}><IconBtn icon="🗑" onClick={onRemove} title="Eliminar sesión" bg="rgba(198,40,40,0.6)"/></div>
+      </div>
+      {open&&<div style={{padding:"13px 13px 7px"}}>
+        {session.blocks.map(b=>(<BlockCard key={b.id} block={b} library={library} onUpdate={d=>upBlk(b.id,d)} onRemove={()=>rmBlk(b.id)}/>))}
+        <Btn onClick={addBlock} color={G.green} style={{width:"100%",marginTop:4}}>+ Añadir bloque de trabajo</Btn>
+      </div>}
+    </div>
+  );
+}
+
+function SessionsSection({sessions,setSessions,library}){
+  const add=()=>setSessions(s=>[...s,mkSession()]);
+  const upS=(id,d)=>setSessions(s=>s.map(x=>x.id===id?{...d,id}:x));
+  const rmS=id=>setSessions(s=>s.filter(x=>x.id!==id));
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:16}}>
+        <div><div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:27,color:G.navy,letterSpacing:"0.03em"}}>SESIONES DE TRABAJO</div><div style={{color:G.muted,fontSize:13,marginTop:2}}>Construye sesiones con bloques — añade ejercicios desde la biblioteca o escríbelos a mano</div></div>
+        <Btn onClick={add} color={G.green}>+ Nueva sesión</Btn>
+      </div>
+      {sessions.length===0&&(
+        <div style={{textAlign:"center",padding:"60px 20px",background:"white",borderRadius:12,border:`2px dashed ${G.border}`}}>
+          <div style={{fontSize:42,marginBottom:10}}>🏋️</div>
+          <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:18,color:G.muted}}>Sin sesiones</div>
+          <div style={{fontSize:13,color:G.muted,marginTop:4,marginBottom:14}}>Crea la primera sesión y construye sus bloques</div>
+          <Btn onClick={add}>+ Crear primera sesión</Btn>
+        </div>
+      )}
+      {sessions.map(s=>(<SessionCard key={s.id} session={s} library={library} onUpdate={d=>upS(s.id,d)} onRemove={()=>rmS(s.id)}/>))}
+    </div>
+  );
+}
+
+/* ════ PDF DOCUMENT ════ */
+function PDFDoc({phases,planTuts,sessions,meta,logo}){
+  const thS={fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,letterSpacing:"0.07em",padding:"6px 6px",textAlign:"center",border:"1px solid #37474F"};
+  const tdW={fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,padding:"5px 7px",textAlign:"center",border:"1px solid #37474F",whiteSpace:"pre-line",lineHeight:1.3};
+
+  const lesItems=planTuts.filter(t=>t.type==="lesion"&&t.title);
+  const tutItems=planTuts.filter(t=>t.type!=="lesion"&&t.title);
+
+  return(
+    <div id="pdf-content" style={{fontFamily:"'Barlow',sans-serif",color:G.text,background:"white"}}>
+
+      {/* ── PAGE 1: COVER + CALENDAR ── */}
+      {/* Cover */}
+      <div className="pdf-cover" style={{background:G.navy,padding:"34px 44px 26px",display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:20}}>
+        <div style={{flex:1}}>
+          <div className="pdf-cover-title" style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:30,letterSpacing:"0.04em",color:"white",lineHeight:1.1}}>{meta.planTitle||"PAUTA DE TRATAMIENTO"}</div>
+          {meta.patientName&&<div className="pdf-cover-patient" style={{marginTop:10,fontSize:13,color:"#94A3B8"}}>Paciente: <span style={{color:"white",fontWeight:700}}>{meta.patientName}</span></div>}
+          <div style={{marginTop:10,display:"flex",gap:20}}>
+            {meta.therapistName&&<div style={{fontSize:11,color:"#64748B"}}>🏥 {meta.therapistName}</div>}
+            {meta.date&&<div style={{fontSize:11,color:"#64748B"}}>📅 {meta.date}</div>}
+          </div>
+        </div>
+        {logo&&<div style={{flexShrink:0,width:88,height:88,borderRadius:10,overflow:"hidden",border:"2px solid rgba(255,255,255,0.15)",background:"white",display:"flex",alignItems:"center",justifyContent:"center"}}><img src={logo} alt="Logo" style={{width:"100%",height:"100%",objectFit:"contain"}}/></div>}
+      </div>
+      <div className="pdf-green-bar" style={{height:5,background:G.green}}/>
+
+      {/* Calendar on page 1 */}
+      {phases.length>0&&(
+        <div style={{padding:"22px 44px 14px"}}>
+          <div className="pdf-section-header" style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:18,color:G.navy,marginBottom:12,borderBottom:`3px solid ${G.green}`,paddingBottom:4}}>ESTRUCTURA DEL PERÍODO</div>
+          {phases.map(p=>{
+            const pCls=PHASE_CLS[p.color]||"pdf-phase-gray";
+            return(
+              <div key={p.id} style={{marginBottom:14}}>
+                <div className={pCls} style={{background:p.color,padding:"6px 12px",borderRadius:"5px 5px 0 0"}}><span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:12,letterSpacing:"0.08em",color:"white"}}>{p.name}</span></div>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead><tr>
+                    <th className="pdf-th" style={{...thS,color:"white",background:G.headerRow,minWidth:78}}>SEMANA</th>
+                    {DAYS.map(d=><th key={d} className="pdf-th" style={{...thS,color:"white",background:G.headerRow}}>{d}</th>)}
+                  </tr></thead>
+                  <tbody>{p.weeks.map(w=>(
+                    <tr key={w.id}>
+                      <td className="pdf-td-week" style={{...tdW,background:"#263238",color:"white"}}>{w.label}</td>
+                      {w.days.map((c,i)=>{
+                        const s=CELL_MAP[c]||{bg:"#ECEFF1",color:"#90A4AE",cls:""};
+                        return <td key={i} className={s.cls} style={{border:"1px solid #ccc",padding:4,textAlign:"center",background:s.bg}}><span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:s.color}}>{c||"—"}</span></td>;
+                      })}
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── PAGE 2: TUTORIALES & OBJETIVOS ── */}
+      {planTuts.filter(t=>t.title).length>0&&(
+        <div className="pdf-page-break" style={{pageBreakBefore:"always"}}>
+          {/* Lesiones */}
+          {lesItems.length>0&&(
+            <div className="pdf-les-section" style={{padding:"22px 44px",background:"#FFF8E1",borderBottom:"2px solid #FFD54F"}}>
+              <div className="pdf-section-header-amber" style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:18,color:G.navy,marginBottom:12,borderBottom:`3px solid ${G.amber}`,paddingBottom:4}}>LESIÓN & OBJETIVOS TERAPÉUTICOS</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:14}}>
+                {lesItems.map(l=>(
+                  <div key={l.id} className="les-card" style={{background:"white",borderRadius:7,border:"1px solid #FFD54F",overflow:"hidden"}}>
+                    {(l.image||ytId(l.url))&&<img src={l.image||(ytId(l.url)?`https://img.youtube.com/vi/${ytId(l.url)}/mqdefault.jpg`:null)} alt="" style={{width:"100%",height:90,objectFit:"cover"}}/>}
+                    <div style={{padding:"9px 11px"}}>
+                      <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:13,color:G.amber,marginBottom:3}}>{l.title}</div>
+                      {l.description&&<div style={{fontSize:10,color:G.muted,lineHeight:1.55,marginBottom:4}}>{l.description}</div>}
+                      {l.objectives&&<div style={{fontSize:10,color:G.text,lineHeight:1.55,borderLeft:`3px solid ${G.amber}`,paddingLeft:6,fontStyle:"italic"}}>{l.objectives}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Tutoriales */}
+          {tutItems.length>0&&(
+            <div className="pdf-tut-section" style={{padding:"22px 44px",background:G.greenPale}}>
+              <div className="pdf-section-header" style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:18,color:G.navy,marginBottom:12,borderBottom:`3px solid ${G.green}`,paddingBottom:4}}>TUTORIALES PREVIOS</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(195px,1fr))",gap:14}}>
+                {tutItems.map(t=>{
+                  const v=ytId(t.url);
+                  return(
+                    <div key={t.id} className="tut-card" style={{background:"white",borderRadius:7,border:`1px solid ${G.greenLight}`,overflow:"hidden"}}>
+                      {(t.image||v)&&<img src={t.image||(v?`https://img.youtube.com/vi/${v}/mqdefault.jpg`:null)} alt="" style={{width:"100%",height:90,objectFit:"cover"}}/>}
+                      <div style={{padding:"9px 11px"}}>
+                        <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:12,color:G.green,marginBottom:3}}>
+                          {t.url?<a href={t.url} target="_blank" rel="noopener noreferrer" style={{color:G.green,textDecoration:"underline"}}>{t.title}</a>:t.title}
+                        </div>
+                        {t.description&&<div style={{fontSize:10,color:G.muted,lineHeight:1.55}}>{t.description}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── PAGE 3: SESIONES ── */}
+      {sessions.length>0&&(
+        <div className="pdf-page-break" style={{pageBreakBefore:"always",padding:"22px 44px 38px"}}>
+          <div className="pdf-section-header" style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:18,color:G.navy,marginBottom:16,borderBottom:`3px solid ${G.green}`,paddingBottom:4}}>SESIONES DE TRABAJO</div>
+          {sessions.map(s=>(
+            <div key={s.id} style={{marginBottom:24}}>
+              <div className="pdf-session-header" style={{background:G.navy,padding:"8px 13px",borderRadius:"5px 5px 0 0",display:"flex",gap:10,alignItems:"baseline"}}>
+                <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:15,letterSpacing:"0.07em",color:"white"}}>{s.title}</span>
+                {s.subtitle&&<span className="pdf-session-subtitle" style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:11,color:"#94A3B8"}}>{s.subtitle}</span>}
+              </div>
+              <div style={{border:`1px solid ${G.border}`,borderTop:"none",padding:"11px 11px 1px",borderRadius:"0 0 5px 5px"}}>
+                {s.blocks.map(b=>{
+                  const exs=b.exercises.filter(e=>e.name.trim());
+                  if(!exs.length)return null;
+                  const bCls=BLOCK_CLS[b.color]||"block-gray";
+                  return(
+                    <div key={b.id} style={{marginBottom:11}}>
+                      <div className={bCls} style={{background:b.color,padding:"5px 11px"}}><span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:12,letterSpacing:"0.09em",color:"white"}}>{b.title}</span></div>
+                      <table style={{width:"100%",borderCollapse:"collapse"}}>
+                        <thead><tr>
+                          <th className="pdf-th" style={{...thS,color:"white",background:G.headerRow,textAlign:"left",width:"30%"}}>TAREA</th>
+                          {PARAMS.map(p=><th key={p.key} className="pdf-th" style={{...thS,color:"white",background:G.headerRow}}>{p.label}</th>)}
+                        </tr></thead>
+                        <tbody>{exs.map((ex,i)=>(
+                          <tr key={ex.id} className={i%2===0?"row-white":"row-alt"} style={{background:i%2===0?"white":G.rowAlt}}>
+                            <td style={{fontFamily:"'Barlow Condensed',sans-serif",border:"1px solid #ddd",padding:"5px 8px",fontWeight:800,fontSize:11}}>
+                              {ex.url&&ytId(ex.url)?<a href={ex.url} target="_blank" rel="noopener noreferrer" style={{color:G.green,textDecoration:"underline"}}>{ex.name}</a>:ex.name}
+                              {ex.notes&&<div style={{fontSize:9,color:G.muted,fontStyle:"italic",marginTop:1}}>*{ex.notes}</div>}
+                            </td>
+                            {PARAMS.map(p=><td key={p.key} style={{fontFamily:"'Barlow Condensed',sans-serif",border:"1px solid #ddd",padding:"5px 7px",textAlign:"center",fontSize:11,fontWeight:p.key==="series"?900:600}}>{ex.params[p.key]?.value||"—"}</td>)}
+                          </tr>
+                        ))}</tbody>
+                      </table>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="pdf-footer" style={{borderTop:`1px solid ${G.border}`,padding:"8px 44px",display:"flex",justifyContent:"space-between",background:G.rowAlt}}>
+        <span style={{fontSize:9,color:G.muted,fontStyle:"italic"}}>PhysioPlanner · Documento clínico terapéutico</span>
+        {meta.therapistName&&<span style={{fontSize:9,color:G.muted,fontWeight:700}}>{meta.therapistName}</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ════ APP ROOT ════ */
+const TABS=[
+  {key:"library",icon:"📚",label:"BIBLIOTECA"},
+  {key:"calendar",icon:"📅",label:"CALENDARIO"},
+  {key:"tutorials",icon:"🎬",label:"TUTORIALES"},
+  {key:"sessions",icon:"🏋️",label:"SESIONES"},
+  {key:"preview",icon:"📄",label:"PDF PREVIEW"},
+];
+
+function App(){
+  const [tab,setTab]=useState("library");
+  const [exLib,setExLib]=useState(()=>LS.load("pp-exlib",[]));
+  const [tutLib,setTutLib]=useState(()=>LS.load("pp-tutlib",[]));
+  const [lesLib,setLesLib]=useState(()=>LS.load("pp-leslib",[]));
+  const [phases,setPhases]=useState(()=>LS.load("pp-phases",[]));
+  const [planTuts,setPlanTuts]=useState(()=>LS.load("pp-plantuts",[]));
+  const [sessions,setSessions]=useState(()=>LS.load("pp-sessions",[]));
+  const [logo,setLogo]=useState(()=>LS.load("pp-logo",null));
+  const [meta,setMeta]=useState(()=>LS.load("pp-meta",{patientName:"",therapistName:"",date:new Date().toLocaleDateString("es-ES"),planTitle:"PAUTA DE TRATAMIENTO"}));
+  const logoRef=useRef();
+
+  useEffect(()=>LS.save("pp-exlib",exLib),[exLib]);
+  useEffect(()=>LS.save("pp-tutlib",tutLib),[tutLib]);
+  useEffect(()=>LS.save("pp-leslib",lesLib),[lesLib]);
+  useEffect(()=>LS.save("pp-phases",phases),[phases]);
+  useEffect(()=>LS.save("pp-plantuts",planTuts),[planTuts]);
+  useEffect(()=>LS.save("pp-sessions",sessions),[sessions]);
+  useEffect(()=>LS.save("pp-logo",logo),[logo]);
+  useEffect(()=>LS.save("pp-meta",meta),[meta]);
+
+  const doPrint=()=>setTimeout(()=>window.print(),120);
+  const navS=a=>({display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"10px 16px",border:"none",background:"none",cursor:"pointer",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:11,letterSpacing:"0.08em",color:a?"white":G.muted,borderBottom:`3px solid ${a?G.green:"transparent"}`,transition:"all .15s",whiteSpace:"nowrap"});
+
+  return(
+    <>
+      {/* ── EDITOR ── */}
+      <div className="no-print">
+        <div style={{background:G.navy,padding:"0 22px",display:"flex",alignItems:"center",justifyContent:"space-between",height:56,position:"sticky",top:0,zIndex:100}}>
+          <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:22,color:"white",letterSpacing:"0.04em"}}>PHYSIO<span style={{color:G.green}}>PLANNER</span></span>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <input value={meta.patientName} onChange={e=>setMeta(m=>({...m,patientName:e.target.value}))} placeholder="Nombre paciente…" style={{fontFamily:"'Barlow',sans-serif",fontSize:12,padding:"5px 10px",borderRadius:6,border:"1px solid #334155",background:"#1E293B",color:"white",width:148}}/>
+            <input value={meta.therapistName} onChange={e=>setMeta(m=>({...m,therapistName:e.target.value}))} placeholder="Profesional…" style={{fontFamily:"'Barlow',sans-serif",fontSize:12,padding:"5px 10px",borderRadius:6,border:"1px solid #334155",background:"#1E293B",color:"white",width:128}}/>
+            <button onClick={doPrint} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:13,letterSpacing:"0.05em",padding:"7px 18px",borderRadius:6,border:"none",background:G.green,color:"white",cursor:"pointer"}}>🖨 Imprimir / PDF</button>
+          </div>
+        </div>
+        <div style={{background:G.navyMid,padding:"0 22px",display:"flex",overflowX:"auto",borderBottom:"1px solid #0F1E2E"}}>
+          {TABS.map(t=>(<button key={t.key} onClick={()=>setTab(t.key)} style={navS(tab===t.key)}><span style={{fontSize:14}}>{t.icon}</span>{t.label}</button>))}
+        </div>
+        <div style={{maxWidth:1100,margin:"0 auto",padding:"24px 18px"}}>
+          {tab==="library"  &&<LibrarySection exLib={exLib} setExLib={setExLib} tutLib={tutLib} setTutLib={setTutLib} lesLib={lesLib} setLesLib={setLesLib}/>}
+          {tab==="calendar" &&<CalendarSection phases={phases} setPhases={setPhases}/>}
+          {tab==="tutorials"&&<PlanTutorialsSection items={planTuts} setItems={setPlanTuts}/>}
+          {tab==="sessions" &&<SessionsSection sessions={sessions} setSessions={setSessions} library={exLib}/>}
+          {tab==="preview"  &&(
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16,gap:16,flexWrap:"wrap"}}>
+                <div>
+                  <div style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:900,fontSize:26,color:G.navy,letterSpacing:"0.03em"}}>VISTA PREVIA DEL PDF</div>
+                  <div style={{color:G.muted,fontSize:13,marginTop:2}}>Pulsa imprimir → <strong>"Guardar como PDF"</strong> como destino de impresión</div>
+                </div>
+                <div style={{display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
+                  {/* Título manual */}
+                  <div>
+                    <label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>TÍTULO DEL DOCUMENTO</label>
+                    <input value={meta.planTitle} onChange={e=>setMeta(m=>({...m,planTitle:e.target.value}))} placeholder="Ej: Período de Rehabilitación — Fase 1"
+                      style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:14,color:G.navy,background:"white",border:`2px solid ${G.green}`,borderRadius:7,padding:"7px 12px",width:280,outline:"none"}}/>
+                  </div>
+                  {/* Fecha */}
+                  <div>
+                    <label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>FECHA</label>
+                    <input value={meta.date} onChange={e=>setMeta(m=>({...m,date:e.target.value}))} placeholder="dd/mm/aaaa"
+                      style={{fontFamily:"'Barlow',sans-serif",fontSize:13,color:G.text,background:"white",border:`1.5px solid ${G.border}`,borderRadius:6,padding:"7px 10px",width:130,outline:"none"}}/>
+                  </div>
+                  {/* Logo */}
+                  <div>
+                    <label style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:10,color:G.muted,letterSpacing:"0.1em",display:"block",marginBottom:3}}>LOGO</label>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <button onClick={()=>logoRef.current?.click()} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:12,padding:"7px 12px",borderRadius:6,border:`1.5px solid ${G.border}`,background:"white",color:G.navy,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                        {logo?<img src={logo} alt="" style={{height:22,width:22,objectFit:"contain",borderRadius:3}}/>:<span style={{fontSize:16}}>🖼</span>}
+                        {logo?"Cambiar":"Subir logo"}
+                      </button>
+                      {logo&&<button onClick={()=>setLogo(null)} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:700,fontSize:11,padding:"6px 9px",borderRadius:6,border:`1.5px solid ${G.red}`,background:G.redBg,color:G.red,cursor:"pointer"}}>✕</button>}
+                      <input ref={logoRef} type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{if(e.target.files[0]){const d=await loadImg(e.target.files[0]);setLogo(d);}}}/>
+                    </div>
+                  </div>
+                  <button onClick={doPrint} style={{fontFamily:"'Barlow Condensed',sans-serif",fontWeight:800,fontSize:13,padding:"8px 20px",borderRadius:6,border:"none",background:G.green,color:"white",cursor:"pointer",alignSelf:"flex-end"}}>🖨 Imprimir / PDF</button>
+                </div>
+              </div>
+              {/* Tip */}
+              <div style={{background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:8,padding:"10px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:18}}>💡</span>
+                <div style={{fontSize:12,color:"#5D4037",lineHeight:1.5}}>
+                  <strong>Cómo guardar el PDF:</strong> Pulsa "🖨 Imprimir / PDF" → en el diálogo del navegador cambia el destino a <strong>"Guardar como PDF"</strong> → pulsa Guardar. Activa <strong>"Gráficos de fondo"</strong> en Más ajustes para que salgan los colores.
+                </div>
+              </div>
+              <div style={{boxShadow:"0 8px 40px rgba(0,0,0,0.15)",borderRadius:6,overflow:"hidden"}}>
+                <PDFDoc phases={phases} planTuts={planTuts} sessions={sessions} meta={meta} logo={logo}/>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── PRINT ONLY ── */}
+      <div className="print-only">
+        <PDFDoc phases={phases} planTuts={planTuts} sessions={sessions} meta={meta} logo={logo}/>
+      </div>
+    </>
+  );
+}
+
+const root=ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App/>);
+</script>
+</body>
+</html>
